@@ -4,7 +4,15 @@ format:
   pdf:
     documentclass: scrartcl
     papersize: letter
+    author: Axel de MONTGOLFIER
+    fig-align: center
 ---
+
+# Classification avec les arbres :
+
+1 - Si on se place dans le cadre d'une régression, un moyen de mesurer l'homogénéité serait de s'intéresser à la variance entre les individus. En effet cette dernière influe sur la proximité ou l'éloignement des individus ce qui nous permet de contrôler ainsi notre répartition. On va ainsi chercher a minimiser la variance entre individus et maximiser la variance entre les groupes d'individus afin de pouvoir réaliser des coupes permettant de rendre le résultat le plus homogène possible. 
+
+2 - On va ainsi générer des simulations en utilisant la fonction "rand_checkers" pour créer un échantillon de 456 individus :
 ```{python}
 #| echo: false
 import os
@@ -36,69 +44,217 @@ _ = sns.axes_style()
 
 
 ```{python}
-# Construction des classifieur
+#| echo: false
 dt_entropy = tree.DecisionTreeClassifier(criterion='entropy')
 dt_gini = tree.DecisionTreeClassifier(criterion='gini')
 
-# Simulation de l'échantillon
 n = 456
-data = rand_checkers(n1=n//4, n2=n//4, n3=n//4, n4=n//4)
+n1 = n//4
+n2 = n//4
+n3 = n//4
+n4 = n//4
+data = rand_checkers(n1, n2, n3, n4)
+
 n_samples = len(data)
 X = data[:,:2]
-Y = np.asarray(data[:,-1], dtype=int)
-
-# Entraînement des deux modèles
+Y = data[:,2].astype(int)
 dt_gini.fit(X, Y)
 dt_entropy.fit(X, Y)
 
 print("Gini criterion")
+#print(dt_gini.get_params())
 print(dt_gini.score(X, Y))
 
 print("Entropy criterion")
+#print(dt_entropy.get_params())
 print(dt_entropy.score(X, Y))
 ```
 
+Maintenant que nous avons effectué cette simulation nous allons pouvoir tester le critère de Gini et le critère d'Entropie en traçant des courbes d'erreurs en fonction de la profondeur maximale de l'arbre :
 ```{python}
-#| label: fig-first
 #| echo: false
-#| fig-cap: "Pourcentage d'erreurs commises en fonction de la profondeur maximale de l'arbre"
-
-# Initialisation 
-dmax = 12      # choix arbitraire   
+dmax = 12
 scores_entropy = np.zeros(dmax)
 scores_gini = np.zeros(dmax)
 
-# Boucle principale
+plt.figure(figsize=(15, 10))
 for i in range(dmax):
-    # Critère : entropie
-    dt_entropy = tree.DecisionTreeClassifier(criterion='entropy', 
-                                             max_depth=i+1)
+    dt_entropy = tree.DecisionTreeClassifier(criterion='entropy', max_depth=i+1)
     dt_entropy.fit(X,Y)
     scores_entropy[i] = dt_entropy.score(X, Y)
-
-    # Critère : indice de Gini
-    dt_gini = tree.DecisionTreeClassifier(criterion='gini', 
-                                          max_depth=i+1)
+    
+    dt_gini = tree.DecisionTreeClassifier(criterion='gini', max_depth=i+1)
     dt_gini.fit(X,Y)
     scores_gini[i] = dt_gini.score(X,Y)
 
-# Affichage des courbes d'erreur
-plt.figure(figsize=(6,3.2))
-plt.plot(1-scores_entropy, label="entropy")
-plt.plot(1-scores_gini, label="gini")
+    plt.subplot(3, 4, i + 1)
+    frontiere(lambda x: dt_gini.predict(x.reshape((1, -1))), X, Y, step=50, samples=False)
+#plt.draw()
+
+plt.figure()
+plt.plot(1-scores_entropy, label="Entropy")
+plt.plot(1-scores_gini, label="Gini")
 plt.legend()
-plt.xlabel('Profondeur maximale', fontsize=12)
-plt.ylabel("Taux d'erreur", fontsize=12)
+plt.xlabel('Max depth')
+plt.ylabel('Accuracy Score')
 plt.draw()
+#print("Scores with entropy criterion: ", scores_entropy)
+#print("Scores with Gini criterion: ", scores_gini)
 ```
 
-```{python}
-#| label: frontiere
-#| fig-cap: "Frontières pour la meilleur profondeur (entropie)"
+On remarque directement que l'erreur diminue en fonction de la profondeur maximale et tend vers 0, quasiment nul lorsque la profondeur maximale est à 12. On constate également que l'erreur sur l'indice de Gini décroit de la même manière que l'erreur sur l'indice d'Entropie. On en déduit donc que plus notre arbre a une grande profondeur plus on sera précis sur nos coupes afin de rendre l'erreur de classification minimale. On peut donc choisir arbitrairement une profondeur de 12, la ou les courbes semblent se stabiliser vers 0. 
 
-dt_entropy.max_depth = np.argmin(1-scores_entropy)+1
-plt.figure(figsize=(6,3.2))
+3- On affiche maintenant la classification obtenue pour une profondeur qui minimise l'erreur
+```{python}
+#| echo: false
+dt_entropy.max_depth = 12
+plt.figure(figsize=(15, 10))
 frontiere(lambda x: dt_entropy.predict(x.reshape((1, -1))), X, Y, step=100)
+plt.title("Best frontier with entropy criterion")
 plt.draw()
 print("Best scores with entropy criterion: ", dt_entropy.score(X, Y))
 ```
+On constate effectivement une répartition plutôt homogène de nos individus.
+
+4- On exporte l'arbre afin de pouvoir l'afficher :
+```{python}
+#| echo: false
+import graphviz
+tree.plot_tree(dt_entropy)
+tree.export_graphviz(dt_entropy, out_file='arbre.dot')
+```
+
+5- On réitère l'expérience avec cette fois ci un jeu de 160 données :
+
+```{python}
+#| echo: false
+dt_entropy = tree.DecisionTreeClassifier(criterion='entropy')
+dt_gini = tree.DecisionTreeClassifier(criterion='gini')
+
+n = 160
+n1 = n//4
+n2 = n//4
+n3 = n//4
+n4 = n//4
+data = rand_checkers(n1, n2, n3, n4)
+
+n_samples = len(data)
+X = data[:,:2]
+Y = data[:,2].astype(int)
+
+dmax = 12
+scores_entropy = np.zeros(dmax)
+scores_gini = np.zeros(dmax)
+
+plt.figure(figsize=(15, 10))
+for i in range(dmax):
+    dt_entropy = tree.DecisionTreeClassifier(criterion='entropy', max_depth=i+1)
+    dt_entropy.fit(X,Y)
+    scores_entropy[i] = dt_entropy.score(X, Y)
+    
+    dt_gini = tree.DecisionTreeClassifier(criterion='gini', max_depth=i+1)
+    dt_gini.fit(X,Y)
+    scores_gini[i] = dt_gini.score(X,Y)
+
+plt.figure()
+plt.plot(1-scores_entropy, label="Entropy")
+plt.plot(1-scores_gini, label="Gini")
+plt.legend()
+plt.xlabel('Max depth')
+plt.ylabel('Accuracy Score')
+plt.draw()
+```
+
+On retrouve une diminution des courbes d'erreur similaire à notre première expérience, cependant les courbes semblent diminuer nettement plus rapidement qu'avant avec cette fois ci une quasi nullité atteinte vers une profondeur de 8. Cependant on constate en faisant plusieurs tentative que les courbes sont nettement plus instable en terme de variance.  
+
+6- On réitére notre expérience avec le jeu de données DIGITS :
+```{python}
+#| echo: false
+digits = datasets.load_digits()
+n = int(0.8 * len(digits.data))
+Xt = digits.data[:n,:]
+X = digits.data[n:,:]
+Yt = digits.target[:n]
+Y = digits.target[n:]
+
+dmax = 12
+scores_entropy = np.zeros(dmax)
+scores_gini = np.zeros(dmax)
+
+plt.figure(figsize=(15, 10))
+for i in range(dmax):
+    dt_entropy = tree.DecisionTreeClassifier(criterion='entropy', max_depth=i+1)
+    dt_entropy.fit(Xt,Yt)
+    scores_entropy[i] = dt_entropy.score(Xt, Yt)
+    
+    dt_gini = tree.DecisionTreeClassifier(criterion='gini', max_depth=i+1)
+    dt_gini.fit(Xt,Yt)
+    scores_gini[i] = dt_gini.score(Xt,Yt)
+
+plt.figure()
+plt.plot(1-scores_entropy, label="Entropy")
+plt.plot(1-scores_gini, label="Gini")
+plt.legend()
+plt.xlabel('Max depth')
+plt.ylabel('Accuracy Score')
+plt.draw()
+```
+On constate que la profondeur telle qu'on approche une erreur 0 pour l'entropie est 7 et la profondeur pour l'indice de Gini est 8 on peut donc réaliser des arbres de ces profondeurs pour les deux indices afin d'avoir une bonne étude. 
+
+```{python}
+#| echo: false
+dt_entropy = tree.DecisionTreeClassifier(max_depth=7, criterion='entropy')
+dt_entropy.fit(Xt,Yt)
+tree.plot_tree(dt_entropy)
+tree.export_graphviz(dt_entropy, out_file='arbredigitentro.dot')
+```
+Ici l'arbre de profondeure maximale 7 pour une l'entropie.
+
+```{python}
+#| echo: false
+dt_gini = tree.DecisionTreeClassifier(max_depth=8, criterion='gini')
+dt_gini.fit(Xt,Yt)
+tree.plot_tree(dt_gini)
+tree.export_graphviz(dt_gini, out_file='arbredigitgini.dot')
+```
+Et ici l'arbre de profondeur maximale 8 pour  l'indice de Gini. 
+
+# Méthode de choix des paramètres - Sèlection de modèle :
+
+7- On applique la validation croisée à l'aide de la fonction "cross_val_score" :
+```{python}
+#| echo: false
+from sklearn.model_selection import cross_val_score
+k = 10
+dmax = 12
+scores_entropy = np.zeros(dmax)
+scores_gini = np.zeros(dmax)
+
+plt.figure(figsize=(15, 10))
+for i in range(dmax):
+    dt_entropy = tree.DecisionTreeClassifier(criterion='entropy', max_depth=i+1)
+    scores_entropy[i] = np.mean(1-cross_val_score(dt_entropy, X, Y, cv=k))
+    dt_gini = tree.DecisionTreeClassifier(criterion='gini', max_depth=i+1)
+    scores_gini[i] = np.mean(1-cross_val_score(dt_gini, X, Y, cv=k))
+
+plt.figure()
+plt.plot(scores_entropy, label="Entropy")
+plt.plot(scores_gini, label="Gini")
+plt.legend()
+plt.xlabel('Max depth')
+plt.ylabel('Accuracy Score')
+plt.draw()
+```
+On constate que L'erreur semble se stabiliser vers 6 pour l'entropie et vers 7 pour l'indice de gini. Cependant cette fois ci nous n'approchons pas 0 comme erreur mais 0,2. 
+
+8- On effectue la courbe d'apprentissage de l'arbre ded décision avec une profondeur maximale de 6 pour le critère de l'entropie :
+```{python}
+#| echo: false
+from sklearn.model_selection import learning_curve
+from sklearn.model_selection import LearningCurveDisplay
+
+dt_entropy = tree.DecisionTreeClassifier(max_depth=6, criterion='entropy')
+LearningCurveDisplay.from_estimator(dt_entropy, digits.data, digits.target, cv=10, train_sizes=np.linspace(0.1, 1.0, 6))
+```
+
+On constate ainsi que notre courbe des données d'apprentissage "train"  est plutôt élevé stagnant a hauteur de 0.9  de plus notre erreur de validation semble croissante et se stabilise au niveau de 500 données d'entrainement au alentours de 0,7. 
